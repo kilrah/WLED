@@ -2112,14 +2112,17 @@ uint16_t mode_fire_2012() {
   for (unsigned stripNr=0; stripNr<strips; stripNr++)
     virtualStrip::runStrip(stripNr, &heat[stripNr * SEGLEN], it);
 
-  if (SEGMENT.is2D()) SEGMENT.blur(32);
+  if (SEGMENT.is2D()) {
+    uint8_t blurAmount = SEGMENT.custom2 >> 2;
+    SEGMENT.blur(blurAmount);
+  }
 
   if (it != SEGENV.step)
     SEGENV.step = it;
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_FIRE_2012[] PROGMEM = "Fire 2012@Cooling,Spark rate,,,Boost;;!;1;sx=64,ix=160,m12=1"; // bars
+static const char _data_FX_MODE_FIRE_2012[] PROGMEM = "Fire 2012@Cooling,Spark rate,,2D Blur,Boost;;!;1;sx=64,ix=160,m12=1,c2=128"; // bars
 #endif //DISABLE_2D_PS_REPLACEMENTS
 
 #ifndef DISABLE_1D_PS_REPLACEMENTS
@@ -7488,7 +7491,7 @@ uint16_t mode_2DGEQ(void) { // By Will Tatam. Code reduction by Ewoud Wijma.
   if ((fadeoutDelay <= 1 ) || ((SEGENV.call % fadeoutDelay) == 0)) SEGMENT.fadeToBlackBy(SEGMENT.speed);
 
   for (int x=0; x < cols; x++) {
-    uint8_t  band       = map(x, 0, cols-1, 0, NUM_BANDS - 1);
+    uint8_t  band       = map(x, 0, cols, 0, NUM_BANDS);
     if (NUM_BANDS < 16) band = map(band, 0, NUM_BANDS - 1, 0, 15); // always use full range. comment out this line to get the previous behaviour.
     band = constrain(band, 0, 15);
     unsigned colorIndex = band * 17;
@@ -8137,7 +8140,7 @@ uint16_t mode_particlefireworks(void)
         speed = 2 + random16(3);
         currentspeed = speed;
         counter = 0;
-        angleincrement = 2730 + random16(5461); // minimum 15Â° (=2730), + random(30Â°) (=5461)
+        angleincrement = 2730 + random16(5461); // minimum 15° (=2730), + random(30°) (=5461)
         angle = random16(); // random start angle
         speedvariation = angle & 0x01; // 0 or 1, no need for a new random number
         // calculate the number of particles to make complete circles
@@ -8658,7 +8661,7 @@ uint16_t mode_particlebox(void)
     {
       int speed = tristate_square8(strip.now >> 7, 90, 15) / ((400 - SEGMENT.speed) >> 3);
       SEGENV.aux0 += speed;
-      if(speed == 0) SEGENV.aux0 = 190; //down (= 270Â°)  
+      if(speed == 0) SEGENV.aux0 = 190; //down (= 270°)  
     }
     else
       SEGENV.aux0 -= increment;
@@ -8972,11 +8975,11 @@ uint16_t mode_particleattractor(void)
   if (SEGMENT.call % 5 == 0)  
      PartSys->sources[0].source.hue++;
   
-  SEGENV.aux0 += 256; // emitting angle, one full turn in 255 frames (0xFFFF is 360Â°)
+  SEGENV.aux0 += 256; // emitting angle, one full turn in 255 frames (0xFFFF is 360°)
   if (SEGMENT.call % 2 == 0) // alternate direction of emit
     PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0, 12);
   else
-    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, 12); // emit at 180Â° as well
+    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, 12); // emit at 180° as well
   // apply force
   #ifdef USERMOD_AUDIOREACTIVE        
   um_data_t *um_data;
@@ -9100,11 +9103,11 @@ uint16_t mode_particleattractor(void)
     PartSys->sources[0].source.ttl = 100; // spray never dies
   }
 
-  SEGENV.aux0 += 256;       // emitting angle, one full turn in 255 frames (0xFFFF is 360Â°)
+  SEGENV.aux0 += 256;       // emitting angle, one full turn in 255 frames (0xFFFF is 360°)
   if (SEGMENT.call % 2 == 0) // alternate direction of emit
     PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0, SEGMENT.custom1 >> 4);
   else
-    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, SEGMENT.custom1 >> 4); // emit at 180Â° as well
+    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, SEGMENT.custom1 >> 4); // emit at 180° as well
 
   SEGENV.aux1 = 0;//++; //line attractor angle
   // apply force
@@ -9411,7 +9414,7 @@ static const char _data_FX_MODE_PARTICLECCIRCULARGEQ[] PROGMEM = "PS Center GEQ@
 /*
 Particle replacement of Ghost Rider by DedeHai (Damian Schneider), original by stepko adapted by Blaz Kristan (AKA blazoncek)
 */
-#define MAXANGLESTEP 2200 //32767 means 180Â°
+#define MAXANGLESTEP 2200 //32767 means 180°
 uint16_t mode_particleghostrider(void)
 {
   if (SEGLEN == 1)
@@ -9472,7 +9475,7 @@ uint16_t mode_particleghostrider(void)
   ghostsettings.bounceY = SEGMENT.check2;
 
   SEGENV.aux0 += (int32_t)SEGENV.step; // step is angle increment
-  uint16_t emitangle = SEGENV.aux0 + 32767; // +180Â°
+  uint16_t emitangle = SEGENV.aux0 + 32767; // +180°
   int32_t speed = map(SEGMENT.speed, 0, 255, 12, 64);
   PartSys->sources[0].source.vx = ((int32_t)cos16(SEGENV.aux0) * speed) / (int32_t)32767; 
   PartSys->sources[0].source.vy = ((int32_t)sin16(SEGENV.aux0) * speed) / (int32_t)32767;
