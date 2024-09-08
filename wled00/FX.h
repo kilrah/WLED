@@ -745,6 +745,9 @@ class WS2812FX {  // 96 bytes
 #ifndef WLED_DISABLE_2D
       panels(1),
 #endif
+      autoSegments(false),
+      correctWB(false),
+      cctFromRgb(false),
       // semi-private (just obscured) used in effect functions through macros
       _colors_t{0,0,0},
       _virtualSegmentLength(0),
@@ -808,7 +811,6 @@ class WS2812FX {  // 96 bytes
       setPixelColor(unsigned n, uint32_t c),      // paints absolute strip pixel with index n and color c
       show(void),                                 // initiates LED output
       setTargetFps(uint8_t fps),
-      addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name), // add effect to the list; defined in FX.cpp
       setupEffectData(void);                      // add default effects to the list; defined in FX.cpp
 
     inline void restartRuntime()          { for (Segment &seg : _segments) seg.markForReset(); }
@@ -844,7 +846,8 @@ class WS2812FX {  // 96 bytes
       getActiveSegmentsNum(void) const,
       getFirstSelectedSegId(void) const,
       getLastActiveSegmentId(void) const,
-      getActiveSegsLightCapabilities(bool selectedOnly = false) const;
+      getActiveSegsLightCapabilities(bool selectedOnly = false) const,
+      addEffect(uint8_t id, mode_ptr mode_fn, const char *mode_name);         // add effect to the list; defined in FX.cpp;
 
     inline uint8_t getBrightness(void) const    { return _brightness; }       // returns current strip brightness
     inline uint8_t getMaxSegments(void) const   { return MAX_NUM_SEGMENTS; }  // returns maximum number of supported segments (fixed value)
@@ -932,6 +935,12 @@ class WS2812FX {  // 96 bytes
 
     void loadCustomPalettes(void); // loads custom palettes from JSON
     std::vector<CRGBPalette16> customPalettes; // TODO: move custom palettes out of WS2812FX class
+
+    struct {
+      bool autoSegments : 1;
+      bool correctWB    : 1;
+      bool cctFromRgb   : 1;
+    };
 
     // using public variables to reduce code size increase due to inline function getSegment() (with bounds checking)
     // and color transitions
