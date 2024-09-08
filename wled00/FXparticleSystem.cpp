@@ -222,7 +222,8 @@ void ParticleSystem::enableParticleCollisions(bool enable, uint8_t hardness) // 
 // emit one particle with variation, returns index of last emitted particle (or -1 if no particle emitted)
 int32_t ParticleSystem::sprayEmit(PSsource &emitter, uint32_t amount)
 {
- for (uint32_t a = 0; a < amount; a++)
+  bool success = false;
+  for (uint32_t a = 0; a < amount; a++)
   {
     for (uint32_t i = 0; i < usedParticles; i++)
     {
@@ -231,6 +232,7 @@ int32_t ParticleSystem::sprayEmit(PSsource &emitter, uint32_t amount)
         emitIndex = 0;
       if (particles[emitIndex].ttl == 0) // find a dead particle
       {
+        success = true;
         particles[emitIndex].vx = emitter.vx + random(-emitter.var, emitter.var); 
         particles[emitIndex].vy = emitter.vy + random(-emitter.var, emitter.var);
         particles[emitIndex].x = emitter.source.x; 
@@ -240,12 +242,15 @@ int32_t ParticleSystem::sprayEmit(PSsource &emitter, uint32_t amount)
         particles[emitIndex].collide = emitter.source.collide;
         particles[emitIndex].ttl = random(emitter.minLife, emitter.maxLife);
         if (advPartProps)
-          advPartProps[emitIndex].size = emitter.size;
-        return i;
+          advPartProps[emitIndex].size = emitter.size;     
+        break;
       }
     }
   }
-  return -1;
+  if(success)
+    return emitIndex;
+  else
+    return -1;
 }
 
 // Spray emitter for particles used for flames (particle TTL depends on source TTL)
@@ -258,7 +263,8 @@ void ParticleSystem::flameEmit(PSsource &emitter)
       emitIndex = 0;
     if (particles[emitIndex].ttl == 0) // find a dead particle
     { 
-      particles[emitIndex].x = emitter.source.x + random16(PS_P_RADIUS<<1) - PS_P_RADIUS; // jitter the flame by one pixel to make the flames wider at the base
+      //particles[emitIndex].x = emitter.source.x + random16(PS_P_RADIUS<<1) - PS_P_RADIUS; // jitter the flame by one pixel to make the flames wider at the base
+      particles[emitIndex].x = emitter.source.x;
       particles[emitIndex].y = emitter.source.y;
       particles[emitIndex].vx = emitter.vx + random16(emitter.var) - (emitter.var >> 1); // random16 is good enough for fire and much faster
       particles[emitIndex].vy = emitter.vy + random16(emitter.var) - (emitter.var >> 1);
@@ -278,11 +284,11 @@ void ParticleSystem::flameEmit(PSsource &emitter)
 
 // Emits a particle at given angle and speed, angle is from 0-65535 (=0-360deg), speed is also affected by emitter->var
 // angle = 0 means in positive x-direction (i.e. to the right)
-void ParticleSystem::angleEmit(PSsource &emitter, uint16_t angle, int8_t speed, uint32_t amount)
+int32_t ParticleSystem::angleEmit(PSsource &emitter, uint16_t angle, int8_t speed, uint32_t amount)
 {
   emitter.vx = ((int32_t)cos16(angle) * (int32_t)speed) / (int32_t)32600; // cos16() and sin16() return signed 16bit, division should be 32767 but 32600 gives slightly better rounding 
   emitter.vy = ((int32_t)sin16(angle) * (int32_t)speed) / (int32_t)32600; // note: cannot use bit shifts as bit shifting is asymmetrical for positive and negative numbers and this needs to be accurate!
-  sprayEmit(emitter, amount);
+  return sprayEmit(emitter, amount);
 }
 
 // particle moves, decays and dies, if killoutofbounds is set, out of bounds particles are set to ttl=0
@@ -766,19 +772,13 @@ void ParticleSystem::ParticleSys_render(bool firemode, uint32_t fireintensity)
     // generate RGB values for particle
     if (firemode)
     {
-      //TODO: decide on a final version...
-      //brightness = (uint32_t)particles[i].ttl * (1 + (fireintensity >> 4)) + (fireintensity >> 2); //this is good
-      //brightness = (uint32_t)particles[i].ttl * (fireintensity >> 3) + (fireintensity >> 1); // this is experimental, also works, flamecolor is more even, does not look as good (but less puffy at lower speeds)
-      //brightness = (((uint32_t)particles[i].ttl * (maxY + PS_P_RADIUS - particles[i].y)) >> 7) + (uint32_t)particles[i].ttl * (fireintensity >> 4) + (fireintensity >> 1); // this is experimental //multiplikation mit weniger als >>4 macht noch mehr puffs bei low speed
-      //brightness = (((uint32_t)particles[i].ttl * (maxY + PS_P_RADIUS - particles[i].y)) >> 7) + particles[i].ttl + (fireintensity>>1); // this is experimental
-      //brightness = (((uint32_t)particles[i].ttl * (maxY + PS_P_RADIUS - particles[i].y)) >> 7) + ((particles[i].ttl * fireintensity) >> 5); // this is experimental TODO: test this -> testing... ok but not the best, bit sparky
-      brightness = (((uint32_t)particles[i].ttl * (maxY + PS_P_RADIUS - particles[i].y)) >> 7) + (fireintensity >> 1); // this is experimental TODO: test this -> testing... does not look too bad!
+      brightness = (uint32_t)particles[i].ttl*(3 + (fireintensity >> 5)) + 20; 
       brightness = brightness > 255 ? 255 : brightness; // faster then using min()
-      baseRGB = ColorFromPalette(SEGPALETTE, brightness, 255, LINEARBLEND);
+      baseRGB = ColorFromPalette(SEGPALETTE, brightness, 255);
     }
     else{
       brightness = particles[i].ttl > 255 ? 255 : particles[i].ttl; //faster then using min()
-      baseRGB = ColorFromPalette(SEGPALETTE, particles[i].hue, 255, LINEARBLEND);
+      baseRGB = ColorFromPalette(SEGPALETTE, particles[i].hue, 255);
       if (particles[i].sat < 255) 
       {
         CHSV baseHSV = rgb2hsv_approximate(baseRGB); //convert to HSV
@@ -1595,14 +1595,14 @@ void ParticleSystem1D::setMotionBlur(uint8_t bluramount)
     motionBlur = bluramount; 
 }
 
-// render size using smearing (see blur function)
+// render size, 0 = 1 pixel, 1 = 2 pixel (interpolated), bigger sizes require adanced properties 
+// note: if size is set larger than 1 without advanced properties, weird things may happen
 void ParticleSystem1D::setParticleSize(uint8_t size)
 {
   particlesize = size;
   particleHardRadius = PS_P_MINHARDRADIUS_1D >> 1; // 1 pixel sized particles have half the radius (for bounce, not for collisions)
   if (particlesize)
     particleHardRadius = particleHardRadius << 1; // 2 pixel sized particles 
-  //TODO: since global size rendering is always 1 or 2 pixels, this could maybe be made simpler with a bool 'singlepixelsize'
 }
 // enable/disable gravity, optionally, set the force (force=8 is default) can be -127 to +127, 0 is disable
 // if enabled, gravity is applied to all particles in ParticleSystemUpdate()
@@ -1903,7 +1903,6 @@ void ParticleSystem1D::ParticleSys_render()
   }
   if (renderbuffer)
     free(renderbuffer); 
-    Serial.println("*");
 }
 
 // calculate pixel positions and brightness distribution and render the particle to local buffer or global buffer
@@ -1961,16 +1960,6 @@ void ParticleSystem1D::renderParticle(CRGB *framebuffer, uint32_t particleindex,
         pixco[1] = 0;
       else
         pxlisinframe[1] = false;
-    }
-
-    if(xoffset < 500)
-    {
-      Serial.print(xoffset);
-      Serial.print(" ");
-      Serial.print(dx);
-      Serial.print(" ");
-      Serial.print(x);
-      Serial.print("/");
     }
 
     //calculate the brightness values for both pixels using linear interpolation (note: in standard rendering out of frame pixels could be skipped but if checks add more clock cycles over all)

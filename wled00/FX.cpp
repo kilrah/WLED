@@ -3688,7 +3688,8 @@ uint16_t mode_exploding_fireworks(void)
   return FRAMETIME;
 }
 #undef MAX_SPARKS
-static const char _data_FX_MODE_EXPLODING_FIREWORKS[] PROGMEM = "Fireworks 1D@Gravity,Firing side,,,,,,Blur;!,!;!;12;pal=11,ix=128";
+static const char _data_FX_MODE_EXPLODING_FIREWORKS[] PROGMEM = "Fireworks 1D@Gravity,Firing side;!,!;!;12;pal=11,ix=128";
+
 
 /*
  * Drip Effect
@@ -8235,7 +8236,7 @@ uint16_t mode_particlefire(void)
 
   if (SEGMENT.call == 0) // initialization TODO: make this a PSinit function, this is needed in every particle FX but first, get this working.
   {
-    if (!initParticleSystem2D(PartSys, 25, 4)) //maximum number of source (PS will determine the exact number based on segment size) and need 4 additional bytes for time keeping (uint32_t lastcall)
+    if (!initParticleSystem2D(PartSys, SEGMENT.virtualWidth(), 4)) //maximum number of source (PS may limit based on segment size); need 4 additional bytes for time keeping (uint32_t lastcall)
       return mode_static(); // allocation failed; //allocation failed
     SEGENV.aux0 = random16(); // aux0 is wind position (index) in the perlin noise
     numFlames = PartSys->numSources; 
@@ -8249,7 +8250,7 @@ uint16_t mode_particlefire(void)
 
   PartSys->updateSystem(); // update system properties (dimensions and data pointers)
   PartSys->setWrapX(SEGMENT.check2);
-  PartSys->setMotionBlur(SEGMENT.check1 * 120); // anable/disable motion blur
+  PartSys->setMotionBlur(SEGMENT.check1 * 180); // anable/disable motion blur
 
   uint32_t firespeed = max((uint8_t)100, SEGMENT.speed); //limit speed to 100 minimum, reduce frame rate to make it slower (slower speeds than 100 do not look nice)  
   if (SEGMENT.speed < 100) //slow, limit FPS
@@ -8260,15 +8261,15 @@ uint16_t mode_particlefire(void)
     {
       SEGMENT.call--; //skipping a frame, decrement the counter (on call0, this is never executed as lastcall is 0, so its fine to not check if >0)
       //still need to render the frame or flickering will occur in transitions
-      PartSys->updateFire(SEGMENT.intensity, true); // render the fire without updating it
+      PartSys->updateFire(SEGMENT.intensity, true); // render the fire without updating particles (render only)
       return FRAMETIME; //do not update this frame
     }
     *lastcall = strip.now;
   }
 
   uint32_t spread = (PartSys->maxX >> 5) * (SEGMENT.custom3 + 1); //fire around segment center (in subpixel points)
-  numFlames = min((uint32_t)PartSys->numSources, (2 + ((spread / PS_P_RADIUS) << 1))); // number of flames used depends on spread with, good value is (fire width in pixel) * 2
-  uint32_t percycle = numFlames*2/3;// / 2; // maximum number of particles emitted per cycle (TODO: for ESP826 maybe use flames/2)
+  numFlames = min((uint32_t)PartSys->numSources, (4 + ((spread / PS_P_RADIUS) << 1))); // number of flames used depends on spread with, good value is (fire width in pixel) * 2
+  uint32_t percycle = (numFlames * 2) / 3;// / 2; // maximum number of particles emitted per cycle (TODO: for ESP826 maybe use flames/2) 
   // percycle = map(SEGMENT.intensity,0,255, 2, (numFlames*3) / 2); //TODO: does this give better flames or worse?
 
   // update the flame sprays:
@@ -8278,28 +8279,23 @@ uint16_t mode_particlefire(void)
     {
       PartSys->sources[i].source.ttl--;
     }
-    else // flame source is dead
+    else // flame source is dead: initialize new flame: set properties of source
     {
-      // initialize new flame: set properties of source
-      if (random16(20) == 0 || SEGMENT.call == 0) // from time to time, change flame position 
-      {
-         PartSys->sources[i].source.x = (PartSys->maxX >> 1) - (spread>>1) + random(spread); // distribute randomly on chosen width
-      }
-        PartSys->sources[i].source.y = -PS_P_RADIUS; // set the source below the frame 
-        PartSys->sources[i].source.ttl = 5 + random16((SEGMENT.custom1 * SEGMENT.custom1) >> 7) / (2 + (firespeed >> 4)); //'hotness' of fire, faster flames reduce the effect or flame height will scale too much with speed -> new, this works!        
-        PartSys->sources[i].maxLife = random16(7) + 13; // defines flame height together with the vy speed, vy speed*maxlife/PS_P_RADIUS is the average flame height
-        PartSys->sources[i].minLife = 4;
-        PartSys->sources[i].vx = (int8_t)random(-3, 3); // emitting speed (sideways)
-        PartSys->sources[i].vy = 5 + (firespeed >> 2);  // emitting speed (upwards) -> this is good
-        PartSys->sources[i].var = (random16(1 + (firespeed >> 5)) + 2); // speed variation around vx,vy (+/- var)
+        PartSys->sources[i].source.x = (PartSys->maxX >> 1) - (spread>>1) + random(spread); // change flame position: distribute randomly on chosen width     
+        PartSys->sources[i].source.y = -(PS_P_RADIUS<<1); // set the source below the frame 
+        PartSys->sources[i].source.ttl = 16 + random((SEGMENT.custom1 * SEGMENT.custom1) >> 7) / (1 + (firespeed >> 5)); //'hotness' of fire, faster flames reduce the effect or flame height will scale too much with speed      
+        PartSys->sources[i].maxLife = random(SEGMENT.virtualHeight() / 2) + 16; // defines flame height together with the vy speed, vy speed*maxlife/PS_P_RADIUS is the average flame height
+        PartSys->sources[i].minLife = PartSys->sources[i].maxLife >> 1;
+        PartSys->sources[i].vx = random16(4) - 2; // emitting speed (sideways)
+        PartSys->sources[i].vy = (SEGMENT.virtualHeight() >> 1) + (firespeed >> 4) + (SEGMENT.custom1>>4);  // emitting speed (upwards) 
+        PartSys->sources[i].var = 2 + random16(2 + (firespeed >> 4)); // speed variation around vx,vy (+/- var)
     }
-    
   }
  
-  if (SEGMENT.call & 0x01) // update noise position every second frames, also add wind
+  if (SEGMENT.call % 3 == 0) // update noise position and add wind
   {
     SEGENV.aux0++; // position in the perlin noise matrix for wind generation
-    if (SEGMENT.call & 0x02) // every third frame
+    if (SEGMENT.call % 10 == 0) 
       SEGENV.aux1++; // move in noise y direction so noise does not repeat as often
     // add wind force to all particles
     int8_t windspeed = ((int16_t)(inoise8(SEGENV.aux0, SEGENV.aux1) - 127) * SEGMENT.custom2) >> 7;
@@ -8334,7 +8330,7 @@ uint16_t mode_particlefire(void)
 
   return FRAMETIME;
 }
-static const char _data_FX_MODE_PARTICLEFIRE[] PROGMEM = "PS Fire@Speed,Intensity,Base Heat,Wind,Spread,Smooth,Cylinder,Turbulence;;!;2;pal=35,sx=110,c1=110,c2=50,c3=31,o1=1";
+static const char _data_FX_MODE_PARTICLEFIRE[] PROGMEM = "PS Fire@Speed,Intensity,Flame Height,Wind,Spread,Smooth,Cylinder,Turbulence;;!;2;pal=35,sx=110,c1=110,c2=50,c3=31,o1=1";
 
 /*
 PS Ballpit: particles falling down, user can enable these three options: X-wraparound, side bounce, ground bounce
@@ -9315,7 +9311,7 @@ if (SEGLEN == 1)
   PartSys->update(); // update and render
   return FRAMETIME;
 }
-static const char _data_FX_MODE_PARTICLECCIRCULARGEQ[] PROGMEM = "PS Center GEQ@Speed,Intensity,Rotation Speed,Color Change,Nozzle Size,,Direction;;!;2f;pal=13,ix=180,c1=0,c2=0,c3=8,o1=0,o2=0";
+static const char _data_FX_MODE_PARTICLECIRCULARGEQ[] PROGMEM = "PS Center GEQ@Speed,Intensity,Rotation Speed,Color Change,Nozzle Size,,Direction;;!;2f;pal=13,ix=180,c1=0,c2=0,c3=8,o1=0,o2=0";
 
 /*
 Particle replacement of Ghost Rider by DedeHai (Damian Schneider), original by stepko adapted by Blaz Kristan (AKA blazoncek)
@@ -9531,6 +9527,88 @@ uint16_t mode_particleblobs(void)
   return FRAMETIME;
 }
 static const char _data_FX_MODE_PARTICLEBLOBS[] PROGMEM = "PS Blobs@Speed,Blobs,Size,Life,Blur,Wobble,Collide,Pulsate;;!;2v;sx=30,ix=64,c1=200,c2=130,c3=0,o1=0,o2=0,o3=1";
+
+/*
+ * Particle Fractal
+ * particles move, then split to form a fractal tree EXPERIMENTAL!
+ * by DedeHai (Damian Schneider)
+ */
+
+uint16_t mode_particlefractal(void)
+{
+if (SEGLEN == 1)
+    return mode_static();
+
+  ParticleSystem *PartSys = NULL;
+  uint32_t i;
+
+  if (SEGMENT.call == 0) // initialization 
+  {
+    if (!initParticleSystem2D(PartSys, 1, 0, true, false)) // init, use advanced particles
+      return mode_static(); // allocation failed
+    PartSys->setKillOutOfBounds(true); 
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem *>(SEGENV.data); // if not first call, just set the pointer to the PS
+
+  if (PartSys == NULL)
+    return mode_static(); // something went wrong, no data! 
+
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+
+  if (SEGMENT.check2)
+    SEGENV.aux0 += SEGMENT.custom1 << 2;
+  else
+    SEGENV.aux0 -= SEGMENT.custom1 << 2;
+
+  int16_t angleoffset = SEGMENT.custom2 << 6;
+  int8_t emitspeed = SEGMENT.speed >> 2;
+  
+  //check particle age, emit 2 particles at the end of the branch
+  for (i = 0; i < PartSys->numParticles; i++)
+  {
+    if(PartSys->particles[i].ttl > 0 && PartSys->particles[i].ttl < 260) //alive and ripe
+    {
+      PartSys->particles[i].ttl = 0;
+      uint16_t currentangle =  ((uint32_t)PartSys->advPartProps[i].forcecounter) << 7; // abuse forcecounter to track the angle
+      PartSys->sources[0].source.x = PartSys->particles[i].x;
+      PartSys->sources[0].source.y = PartSys->particles[i].y;;
+      PartSys->sources[0].source.hue = PartSys->particles[i].hue + 50; // todo: make color schemes    
+      uint16_t angle = currentangle - angleoffset;
+      int32_t index = PartSys->angleEmit(PartSys->sources[0], angle, emitspeed);     //upward TODO: make angle adjustable
+      Serial.print("branch emit1 at idx = ");
+      Serial.println(index);
+      //TODO: check if index >=0!!!
+      PartSys->advPartProps[index].forcecounter = angle >> 7;
+      angle = currentangle + angleoffset;
+      index = PartSys->angleEmit(PartSys->sources[0], angle, emitspeed);      
+      Serial.print("branch emit2 at idx = ");
+      Serial.println(index);
+      PartSys->advPartProps[index].forcecounter = angle >> 7;
+    }
+    
+
+  }
+  if(SEGENV.call % (256-SEGMENT.intensity) == 0)
+  {
+    PartSys->sources[0].source.x = (PartSys->maxX + 1) >> 1;
+    PartSys->sources[0].source.y = 5;
+    PartSys->sources[0].source.hue = 0; // todo: make color schemes
+    PartSys->sources[0].maxLife = 275;
+    PartSys->sources[0].minLife = 270;
+    uint32_t angle = ((uint32_t)SEGMENT.custom1) << 7; //16 bit angle, 0° to 180°
+    int32_t index = PartSys->angleEmit(PartSys->sources[0], angle, emitspeed);     //upward TODO: make angle adjustable
+    Serial.print("base emit at idx = ");
+    Serial.println(index);
+    //set the forcecounter to track the angle (only 8 bit precision...)
+    PartSys->advPartProps[index].forcecounter = angle >> 7;
+  } 
+  
+  PartSys->setMotionBlur(((SEGMENT.custom3) << 3) + 7);
+  PartSys->update(); // update and render
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PARTICLEFRACTAL[] PROGMEM = "PS fractal (exp)@Speed,Intensity,Base angle,branch angle,Blur,,Direction;;!;2f;pal=13,ix=180,c1=0,c2=0,c3=8,o1=0,o2=0";
 
 #endif //WLED_DISABLE_PARTICLESYSTEM2D
 
@@ -10663,6 +10741,83 @@ uint16_t mode_particle1DGEQ(void)
 static const char _data_FX_MODE_PS_1D_GEQ[] PROGMEM = "PS 1D GEQ@Speed,!,Size,Blur/Overlay,,,,;,!;!;1f;pal=0,sx=50,ix=200,c1=0,c2=0,c3=0,o1=1,o2=1,o3=0";
 
 
+/*
+Particle based Fire effect 
+Uses palette for particle color
+by DedeHai (Damian Schneider)
+*/
+
+uint16_t mode_particleFire1D(void)
+{
+  if (SEGLEN == 1)
+    return mode_static();
+  ParticleSystem1D *PartSys = NULL;  
+
+  if (SEGMENT.call == 0) // initialization 
+  {
+    if (!initParticleSystem1D(PartSys, 5)) // init
+      return mode_static(); // allocation failed
+    PartSys->setKillOutOfBounds(true);
+    PartSys->setParticleSize(1);
+  }
+  else
+    PartSys = reinterpret_cast<ParticleSystem1D *>(SEGENV.data); // if not first call, just set the pointer to the PS
+
+  if (PartSys == NULL)
+    return mode_static(); // something went wrong, no data!
+
+  // Particle System settings
+  PartSys->updateSystem(); // update system properties (dimensions and data pointers)
+  PartSys->setMotionBlur(128 + (SEGMENT.custom2 >> 1)); // anable motion blur
+  PartSys->setColorByAge(true); 
+  uint32_t emitparticles = 1;
+  uint32_t j = random16();
+  for(uint i = 0; i < 3; i++) 
+  { 
+    if(PartSys->sources[i].source.ttl > 50)
+      PartSys->sources[i].source.ttl -= 10;
+    else  
+       PartSys->sources[i].source.ttl = 100 + random16(200);
+  }
+  
+  
+  for(uint i = 0; i < PartSys->numSources; i++) 
+  { 
+    j = (j + 1) % PartSys->numSources;
+    PartSys->sources[j].source.x = 0; 
+    PartSys->sources[j].var = 2 + (SEGMENT.speed >> 4);  
+    //base flames
+    if(j > 2) {
+      PartSys->sources[j].minLife = 150 + SEGMENT.intensity + (j << 2); 
+      PartSys->sources[j].maxLife = 200 + SEGMENT.intensity + (j << 3); 
+      PartSys->sources[j].v = (SEGMENT.speed >> (2 + (j<<1)));
+      if(emitparticles)
+      {
+        emitparticles--;
+        PartSys->sprayEmit(PartSys->sources[j]); //emit a particle
+      }
+    }
+    else{
+      PartSys->sources[j].minLife = PartSys->sources[j].source.ttl + SEGMENT.intensity; 
+      PartSys->sources[j].maxLife = PartSys->sources[j].minLife + 50; 
+      PartSys->sources[j].v = SEGMENT.speed >> 2;
+      if(SEGENV.call & 0x01) //every second frame
+        PartSys->sprayEmit(PartSys->sources[j]); //emit a particle
+    }
+  }
+
+  for(uint i = 0; i < PartSys->usedParticles; i++) 
+  {     
+    PartSys->particles[i].x += PartSys->particles[i].ttl >> 7; // 'hot' particles are faster, apply some extra velocity
+    if(PartSys->particles[i].ttl > 3 + ((255 - SEGMENT.custom1) >> 1))
+      PartSys->particles[i].ttl -= map(SEGMENT.custom1, 0, 255, 1 , 3); // age faster
+  }
+
+  PartSys->update(); // update and render
+  
+  return FRAMETIME;
+}
+static const char _data_FX_MODE_PS_FIRE1D[] PROGMEM = "PS Fire 1D@!,!,Cooling,Blur/Overlay;,!;!;1;pal=35,sx=100,ix=50,c1=80,c2=100,c3=28,o1=1,o2=1,o3=0";
 #endif //WLED_DISABLE_PARTICLESYSTEM1D
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -10931,7 +11086,9 @@ void WS2812FX::setupEffectData() {
   addEffect(FX_MODE_PARTICLESGEQ, &mode_particleGEQ, _data_FX_MODE_PARTICLEGEQ);
   addEffect(FX_MODE_PARTICLEGHOSTRIDER, &mode_particleghostrider, _data_FX_MODE_PARTICLEGHOSTRIDER);
   addEffect(FX_MODE_PARTICLEBLOBS, &mode_particleblobs, _data_FX_MODE_PARTICLEBLOBS);
-  addEffect(FX_MODE_PARTICLECENTERGEQ, &mode_particlecenterGEQ, _data_FX_MODE_PARTICLECCIRCULARGEQ);
+  addEffect(FX_MODE_PARTICLECENTERGEQ, &mode_particlecenterGEQ, _data_FX_MODE_PARTICLECIRCULARGEQ);
+  addEffect(FX_MODE_PSFRACTAL, &mode_particlefractal, _data_FX_MODE_PARTICLEFRACTAL);
+  
 #endif // WLED_DISABLE_PARTICLESYSTEM2D
 
 #endif // WLED_DISABLE_2D
@@ -10948,6 +11105,7 @@ addEffect(FX_MODE_PSBALANCE, &mode_particleBalance, _data_FX_MODE_PS_BALANCE);
 addEffect(FX_MODE_PSCHASE, &mode_particleChase, _data_FX_MODE_PS_CHASE);
 addEffect(FX_MODE_PSSTARBURST, &mode_particleStarburst, _data_FX_MODE_PS_STARBURST);
 addEffect(FX_MODE_PS1DGEQ, &mode_particle1DGEQ, _data_FX_MODE_PS_1D_GEQ);
+addEffect(FX_MODE_PSFIRE1D, &mode_particleFire1D, _data_FX_MODE_PS_FIRE1D);
 
 
 #endif // WLED_DISABLE_PARTICLESYSTEM1D
