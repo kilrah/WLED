@@ -5,8 +5,8 @@ During deep sleep the ESP is shut down completely: no WiFi, no CPU, no outputs. 
 
 # A word of warning
 
-If the ESP can not be awoken from deep sleep due to a wrong configuration it has to be flashed again through USB. There is no other way to wake it up.
 When you disable the WLED option 'Turn LEDs on after power up/reset' the ESP will go into deep sleep directly after power up and only start WLED after it has been woken up.
+If the ESP can not be awoken from deep sleep due to a wrong configuration it has to be flashed again through USB. There is no other way to wake it up.
 
 # Power Consumption in deep sleep
 
@@ -19,10 +19,10 @@ The current drawn by the ESP in deep sleep mode depends on the type and is in th
 
 However, there is usually additional components on a controller that increase the value:
 - Power LED: the power LED on a ESP board draws 500uA - 1mA
-- LDO: the voltage regulator also draws idle current. Depending on the type used this can be around 50uA up to 5mA (LM1117). Special low power LDOs with very low idle currents do exist
-- Digital LEDs: WS2812 for example draw a current of 1mA per LED. To make use of this usermod it is required to power them off using MOSFETs or a Relay
+- LDO: the voltage regulator also draws idle current. Depending on the type used this can be around 50uA up to 10mA (LM1117). Special low power LDOs with very low idle currents do exist
+- Digital LEDs: WS2812 for example draw a current of about 1mA per LED. To make good use of this usermod it is required to power them off using MOSFETs or a Relay
 
-For lowest power consumption, remove the Power LED and make sure your board does not use an LM1117.
+For lowest power consumption, remove the Power LED and make sure your board does not use an LM1117. On a ESP32 C3 Supermini with the power LED removed (no other modifications) powered through the 5V pin I measured a current draw of 50uA in deep sleep.
 
 # Useable GPIOs
 
@@ -51,7 +51,12 @@ Place the `#define` in wled.h or add `-D DEEPSLEEP_xxx` to your platformio_overr
 * `DEEPSLEEP_WAKEUPPIN x`    - REQUIRED: define the pin to be used for wake-up, see list of useable pins above. The pin can be used normally as a button pin in WLED.
 * `DEEPSLEEP_WAKEWHENHIGH`   - OPTIONAL: if defined, wakes up when pin goes high (default is low)
 * `DEEPSLEEP_DISABLEPULL`    - OPTIONAL: if defined, internal pullup/pulldown is disabled in deep sleep (default is ebnabled)
-* `DEEPSLEEP_WAKEUPINTEVAL`  - OPTIONAL: number of seconds after which a wake-up happens automatically (sooner if button is pressed) must be > 0
+* `DEEPSLEEP_WAKEUPINTERVAL` - OPTIONAL: number of seconds after which a wake-up happens automatically (sooner if button is pressed) must be > 0, accuracy is about 2%
+
+example for env build flags:
+ `-D USERMOD_DEEP_SLEEP`
+ `-D DEEPSLEEP_WAKEUPPIN=4`
+ `-D DEEPSLEEP_WAKEUPINTERVAL=43200` ;wake up after 12 hours
 
 now go on and save some power
 @dedehai
