@@ -39,9 +39,6 @@
 
 #if !defined(WLED_DISABLE_PARTICLESYSTEM2D) || !defined(WLED_DISABLE_PARTICLESYSTEM1D)  
 #include "FXparticleSystem.h"
-#include "wled.h"
-#include "FastLED.h"
-#include "FX.h"
 #endif
 
 #ifndef WLED_DISABLE_PARTICLESYSTEM2D
@@ -256,30 +253,8 @@ int32_t ParticleSystem::sprayEmit(PSsource &emitter, uint32_t amount)
 // Spray emitter for particles used for flames (particle TTL depends on source TTL)
 void ParticleSystem::flameEmit(PSsource &emitter)
 {
-  for (uint32_t i = 0; i < usedParticles; i++)
-  {
-    emitIndex++;
-    if (emitIndex >= usedParticles)
-      emitIndex = 0;
-    if (particles[emitIndex].ttl == 0) // find a dead particle
-    { 
-      //particles[emitIndex].x = emitter.source.x + random16(PS_P_RADIUS<<1) - PS_P_RADIUS; // jitter the flame by one pixel to make the flames wider at the base
-      particles[emitIndex].x = emitter.source.x;
-      particles[emitIndex].y = emitter.source.y;
-      particles[emitIndex].vx = emitter.vx + random16(emitter.var) - (emitter.var >> 1); // random16 is good enough for fire and much faster
-      particles[emitIndex].vy = emitter.vy + random16(emitter.var) - (emitter.var >> 1);
-      particles[emitIndex].ttl = random(emitter.minLife, emitter.maxLife) + emitter.source.ttl; 
-      // fire uses ttl and not hue for heat, so no need to set the hue
-      break; // done
-    }
-  }
-  /*
-  // note: this attemt to save on code size turns out to be much slower as fire uses a lot of particle emits, this must be efficient. also emitter.var would need adjustment
-  uint32_t partidx = sprayEmit(emitter); //emit one particle
-  // adjust properties
-  particles[partidx].x += random16(PS_P_RADIUS<<1) - PS_P_RADIUS; // jitter the flame by one pixel to make the flames wider at the base
-  particles[partidx].ttl += emitter.source.ttl; // flame intensity dies down with emitter TTL
-  */
+  int emitIndex = sprayEmit(emitter);
+  if(emitIndex > 0)  particles[emitIndex].ttl +=  emitter.source.ttl;
 }
 
 // Emits a particle at given angle and speed, angle is from 0-65535 (=0-360deg), speed is also affected by emitter->var
@@ -750,9 +725,7 @@ void ParticleSystem::ParticleSys_render(bool firemode, uint32_t fireintensity)
           }
         }
       }
-
     }
-
   }
   
   if (!useLocalBuffer) //disabled or allocation above failed
@@ -785,8 +758,7 @@ void ParticleSystem::ParticleSys_render(bool firemode, uint32_t fireintensity)
         baseHSV.s = particles[i].sat; //set the saturation
         baseRGB = (CRGB)baseHSV; // convert back to RGB
       }
-    }
-    
+    }    
     renderParticle(framebuffer, i, brightness, baseRGB, renderbuffer);
   }
 
@@ -2365,6 +2337,7 @@ int32_t limitSpeed(int32_t speed)
 // note: result is stored in c1, so c1 will contain the result. not using a return value is much faster as the struct does not need to be copied upon return
 void fast_color_add(CRGB &c1, CRGB &c2, uint32_t scale)
 {
+  //note: function is manly used to add scaled colors, so checking if one color is black is slower
   uint32_t r, g, b;
   if (scale < 255) {
     r = c1.r + ((c2.r * scale) >> 8);
@@ -2377,18 +2350,14 @@ void fast_color_add(CRGB &c1, CRGB &c2, uint32_t scale)
     b = c1.b + c2.b;
   }
   uint32_t max = r;
-  if (g > max) // note: using ? operator would be slower by 2 instructions
-    max = g;
-  if (b > max)
-    max = b;
-  if (max < 256)
-  {
+  if (g > max) max = g;
+  if (b > max) max = b;
+  if (max < 256) {
     c1.r = r; // save result to c1
     c1.g = g;
     c1.b = b;
   }
-  else
-  {
+  else {
     c1.r = (r * 255) / max;
     c1.g = (g * 255) / max;
     c1.b = (b * 255) / max;
