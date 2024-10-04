@@ -69,20 +69,20 @@ typedef struct WiFiConfig {
 // similar to NeoPixelBus NeoGammaTableMethod but allows dynamic changes (superseded by NPB::NeoGammaDynamicTableMethod)
 class NeoGammaWLEDMethod {
   public:
-    static uint8_t Correct(uint8_t value);      // apply Gamma to single channel
-    static uint32_t Correct32(uint32_t color);  // apply Gamma to RGBW32 color (WLED specific, not used by NPB)
-    static void calcGammaTable(float gamma);    // re-calculates & fills gamma table
+    [[gnu::hot]] static uint8_t Correct(uint8_t value);         // apply Gamma to single channel
+    [[gnu::hot]] static uint32_t Correct32(uint32_t color);     // apply Gamma to RGBW32 color (WLED specific, not used by NPB)
+    static void calcGammaTable(float gamma);                              // re-calculates & fills gamma table
     static inline uint8_t rawGamma8(uint8_t val) { return gammaT[val]; }  // get value from Gamma table (WLED specific, not used by NPB)
   private:
     static uint8_t gammaT[];
 };
 #define gamma32(c) NeoGammaWLEDMethod::Correct32(c)
 #define gamma8(c)  NeoGammaWLEDMethod::rawGamma8(c)
-uint32_t color_blend(uint32_t,uint32_t,uint16_t,bool b16=false);
-uint32_t color_add(uint32_t,uint32_t, bool fast=false);
-uint32_t color_fade(uint32_t c1, uint8_t amount, bool video=false);
+[[gnu::hot]] uint32_t color_blend(uint32_t,uint32_t,uint16_t,bool b16=false);
+[[gnu::hot]] uint32_t color_add(uint32_t,uint32_t, bool fast=false);
+[[gnu::hot]] uint32_t color_fade(uint32_t c1, uint8_t amount, bool video=false);
 CRGBPalette16 generateHarmonicRandomPalette(CRGBPalette16 &basepalette);
-CRGBPalette16 generateRandomPalette(void);
+CRGBPalette16 generateRandomPalette();
 inline uint32_t colorFromRgbw(byte* rgbw) { return uint32_t((byte(rgbw[3]) << 24) | (byte(rgbw[0]) << 16) | (byte(rgbw[1]) << 8) | (byte(rgbw[2]))); }
 void colorHStoRGB(uint16_t hue, byte sat, byte* rgb); //hue, sat to rgb
 void colorKtoRGB(uint16_t kelvin, byte* rgb);
@@ -314,7 +314,7 @@ class Usermod {
     virtual bool handleButton(uint8_t b) { return false; }                   // button overrides are possible here
     virtual bool getUMData(um_data_t **data) { if (data) *data = nullptr; return false; }; // usermod data exchange [see examples for audio effects]
     virtual void connected() {}                                              // called when WiFi is (re)connected
-    virtual void appendConfigData() {}                                       // helper function called from usermod settings page to add metadata for entry fields
+    virtual void appendConfigData(Print& settingsScript);                    // helper function called from usermod settings page to add metadata for entry fields
     virtual void addToJsonState(JsonObject& obj) {}                          // add JSON objects for WLED state
     virtual void addToJsonInfo(JsonObject& obj) {}                           // add JSON objects for UI Info page
     virtual void readFromJsonState(JsonObject& obj) {}                       // process JSON messages received from web server
@@ -326,38 +326,48 @@ class Usermod {
     virtual void onUpdateBegin(bool) {}                                      // fired prior to and after unsuccessful firmware update
     virtual void onStateChange(uint8_t mode) {}                              // fired upon WLED state change
     virtual uint16_t getId() {return USERMOD_ID_UNSPECIFIED;}
+
+  // API shims
+  private:
+    static Print* oappend_shim;
+    // old form of appendConfigData; called by default appendConfigData(Print&) with oappend_shim set up
+    // private so it is not accidentally invoked except via Usermod::appendConfigData(Print&)
+    virtual void appendConfigData() {}    
+  protected:
+    // Shim for oappend(), which used to exist in utils.cpp
+    template<typename T> static inline void oappend(const T& t) { oappend_shim->print(t); };
 };
 
 class UsermodManager {
   private:
-    Usermod* ums[WLED_MAX_USERMODS];
-    byte numMods = 0;
+    static Usermod* ums[WLED_MAX_USERMODS];
+    static byte numMods;
 
   public:
-    void loop();
-    void handleOverlayDraw();
-    bool handleButton(uint8_t b);
-    bool getUMData(um_data_t **um_data, uint8_t mod_id = USERMOD_ID_RESERVED); // USERMOD_ID_RESERVED will poll all usermods
-    void setup();
-    void connected();
-    void appendConfigData();
-    void addToJsonState(JsonObject& obj);
-    void addToJsonInfo(JsonObject& obj);
-    void readFromJsonState(JsonObject& obj);
-    void addToConfig(JsonObject& obj);
-    bool readFromConfig(JsonObject& obj);
+    static void loop();
+    static void handleOverlayDraw();
+    static bool handleButton(uint8_t b);
+    static bool getUMData(um_data_t **um_data, uint8_t mod_id = USERMOD_ID_RESERVED); // USERMOD_ID_RESERVED will poll all usermods
+    static void setup();
+    static void connected();
+    static void appendConfigData(Print&);
+    static void addToJsonState(JsonObject& obj);
+    static void addToJsonInfo(JsonObject& obj);
+    static void readFromJsonState(JsonObject& obj);
+    static void addToConfig(JsonObject& obj);
+    static bool readFromConfig(JsonObject& obj);
 #ifndef WLED_DISABLE_MQTT
-    void onMqttConnect(bool sessionPresent);
-    bool onMqttMessage(char* topic, char* payload);
+    static void onMqttConnect(bool sessionPresent);
+    static bool onMqttMessage(char* topic, char* payload);
 #endif
 #ifndef WLED_DISABLE_ESPNOW
-    bool onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t len);
+    static bool onEspNowMessage(uint8_t* sender, uint8_t* payload, uint8_t len);
 #endif
-    void onUpdateBegin(bool);
-    void onStateChange(uint8_t);
-    bool add(Usermod* um);
-    Usermod* lookup(uint16_t mod_id);
-    byte getModCount() {return numMods;};
+    static void onUpdateBegin(bool);
+    static void onStateChange(uint8_t);
+    static bool add(Usermod* um);
+    static Usermod* lookup(uint16_t mod_id);
+    static inline byte getModCount() {return numMods;};
 };
 
 //usermods_list.cpp
@@ -374,10 +384,11 @@ void parseNumber(const char* str, byte* val, byte minv=0, byte maxv=255);
 bool getVal(JsonVariant elem, byte* val, byte minv=0, byte maxv=255);
 bool getBoolVal(JsonVariant elem, bool dflt);
 bool updateVal(const char* req, const char* key, byte* val, byte minv=0, byte maxv=255);
-bool oappend(const char* txt); // append new c string to temp buffer efficiently
-bool oappendi(int i);          // append new number to temp buffer efficiently
-void sappend(char stype, const char* key, int val);
-void sappends(char stype, const char* key, char* val);
+size_t printSetFormCheckbox(Print& settingsScript, const char* key, int val);
+size_t printSetFormValue(Print& settingsScript, const char* key, int val);
+size_t printSetFormValue(Print& settingsScript, const char* key, const char* val);
+size_t printSetFormIndex(Print& settingsScript, const char* key, int index);
+size_t printSetClassElementHTML(Print& settingsScript, const char* key, const int index, const char* val);
 void prepareHostname(char* hostname);
 bool isAsterisksOnly(const char* str, byte maxLen);
 bool requestJSONBufferLock(uint8_t module=255);
@@ -390,6 +401,7 @@ uint16_t crc16(const unsigned char* data_p, size_t length);
 um_data_t* simulateSound(uint8_t simulationId);
 void enumerateLedmaps();
 uint8_t get_random_wheel_index(uint8_t pos);
+float mapf(float x, float in_min, float in_max, float out_min, float out_max);
 
 // RAII guard class for the JSON Buffer lock
 // Modeled after std::lock_guard
@@ -455,7 +467,7 @@ void wsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventTyp
 void sendDataWs(AsyncWebSocketClient * client = nullptr);
 
 //xml.cpp
-void XML_response(AsyncWebServerRequest *request, char* dest = nullptr);
-void getSettingsJS(byte subPage, char* dest);
+void XML_response(Print& dest);
+void getSettingsJS(byte subPage, Print& dest);
 
 #endif

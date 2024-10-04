@@ -161,7 +161,7 @@ void WS2812FX::setUpMatrix() {
 #ifndef WLED_DISABLE_2D
 
 // XY(x,y) - gets pixel index within current segment (often used to reference leds[] array element)
-uint16_t IRAM_ATTR_YN Segment::XY(uint16_t x, uint16_t y)
+uint16_t IRAM_ATTR_YN Segment::XY(int x, int y)
 {
   unsigned width  = virtualWidth();   // segment width in logical pixels (can be 0 if segment is inactive)
   unsigned height = virtualHeight();  // segment height in logical pixels (is always >= 1)
@@ -704,11 +704,14 @@ void Segment::wu_pixel(uint32_t x, uint32_t y, CRGB c) {      //awesome wu_pixel
                    WU_WEIGHT(ix, yy), WU_WEIGHT(xx, yy)};
   // multiply the intensities by the colour, and saturating-add them to the pixels
   for (int i = 0; i < 4; i++) {
-    CRGB led = getPixelColorXY((x >> 8) + (i & 1), (y >> 8) + ((i >> 1) & 1));
+    int wu_x = (x >> 8) + (i & 1);        // precalculate x
+    int wu_y = (y >> 8) + ((i >> 1) & 1); // precalculate y
+    CRGB led = getPixelColorXY(wu_x, wu_y);
+    CRGB oldLed = led;
     led.r = qadd8(led.r, c.r * wu[i] >> 8);
     led.g = qadd8(led.g, c.g * wu[i] >> 8);
     led.b = qadd8(led.b, c.b * wu[i] >> 8);
-    setPixelColorXY(int((x >> 8) + (i & 1)), int((y >> 8) + ((i >> 1) & 1)), led);
+    if (led != oldLed) setPixelColorXY(wu_x, wu_y, led); // don't repaint if same color
   }
 }
 #undef WU_WEIGHT
