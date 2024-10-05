@@ -73,7 +73,7 @@ class DeepSleepUsermod : public Usermod {
       esp_sleep_enable_timer_wakeup(DEEPSLEEP_WAKEUPINTERVAL * 1e6); //sleep for x seconds
       #endif
 
-  #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32C3) // ESP32 S2, S3, C3
+  #if defined(CONFIG_IDF_TARGET_ESP32C3) // ESP32 C3
     #if defined(DEEPSLEEP_DISABLEPULL)
       gpio_sleep_set_pull_mode((gpio_num_t)wakeupPin, GPIO_FLOATING);
     #else
@@ -84,7 +84,7 @@ class DeepSleepUsermod : public Usermod {
       #endif
     #endif
       halerror = esp_deep_sleep_enable_gpio_wakeup(1<<wakeupPin, ESP_GPIO_WAKEUP_GPIO_LOW);
-  #else // ESP32
+  #else // ESP32, ESP32 S2, S3
     #ifndef DEEPSLEEP_DISABLEPULL
       #ifdef DEEPSLEEP_WAKEWHENHIGH
       rtc_gpio_pulldown_en((gpio_num_t)wakeupPin);
