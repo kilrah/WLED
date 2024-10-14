@@ -4040,7 +4040,7 @@ uint16_t mode_pacifica()
 
   // Increment the four "color index start" counters, one for each wave layer.
   // Each is incremented at a different speed, and the speeds vary over time.
-  unsigned sCIStart1 = SEGENV.aux0, sCIStart2 = SEGENV.aux1, sCIStart3 = SEGENV.step, sCIStart4 = SEGENV.step >> 16;
+  unsigned sCIStart1 = SEGENV.aux0, sCIStart2 = SEGENV.aux1, sCIStart3 = SEGENV.step & 0xFFFF, sCIStart4 = (SEGENV.step >> 16);
   uint32_t deltams = (FRAMETIME >> 2) + ((FRAMETIME * SEGMENT.speed) >> 7);
   uint64_t deltat = (strip.now >> 2) + ((strip.now * SEGMENT.speed) >> 7);
   strip.now = deltat;
@@ -4055,7 +4055,7 @@ uint16_t mode_pacifica()
   sCIStart3 -= (deltams1 * beatsin88(501,5,7));
   sCIStart4 -= (deltams2 * beatsin88(257,4,6));
   SEGENV.aux0 = sCIStart1; SEGENV.aux1 = sCIStart2;
-  SEGENV.step = sCIStart4; SEGENV.step = (SEGENV.step << 16) + sCIStart3;
+  SEGENV.step = (sCIStart4 << 16) | (sCIStart3 & 0xFFFF);
 
   // Clear out the LED array to a dim background blue-green
   //SEGMENT.fill(132618);
@@ -4086,7 +4086,7 @@ uint16_t mode_pacifica()
     c.green = scale8(c.green, 200);
     c |= CRGB( 2, 5, 7);
 
-    SEGMENT.setPixelColor(i, c.red, c.green, c.blue);
+    SEGMENT.setPixelColor(i, c);
   }
 
   strip.now = nowOld;
@@ -6334,7 +6334,7 @@ static const char _data_FX_MODE_2DPLASMAROTOZOOM[] PROGMEM = "Rotozoomer@!,Scale
   float    *fftBin = nullptr;
   um_data_t *um_data;
   if (UsermodManager::getUMData(&um_data, USERMOD_ID_AUDIOREACTIVE)) {
-    volumeSmth    = *(float*)   um_data->u_data[0]; 
+    volumeSmth    = *(float*)   um_data->u_data[0];
     volumeRaw     = *(float*)   um_data->u_data[1];
     fftResult     =  (uint8_t*) um_data->u_data[2];
     samplePeak    = *(uint8_t*) um_data->u_data[3];
@@ -8045,7 +8045,7 @@ uint16_t mode_particlefireworks(void)
         speed = 2 + random16(3);
         currentspeed = speed;
         counter = 0;
-        angleincrement = 2730 + random16(5461); // minimum 15� (=2730), + random(30�) (=5461)
+        angleincrement = 2730 + random16(5461); // minimum 15° (=2730), + random(30°) (=5461)
         angle = random16(); // random start angle
         speedvariation = angle & 0x01; // 0 or 1, no need for a new random number
         // calculate the number of particles to make complete circles
@@ -8560,7 +8560,7 @@ uint16_t mode_particlebox(void)
     {
       int speed = tristate_square8(strip.now >> 7, 90, 15) / ((400 - SEGMENT.speed) >> 3);
       SEGENV.aux0 += speed;
-      if(speed == 0) SEGENV.aux0 = 190; //down (= 270�)  
+      if(speed == 0) SEGENV.aux0 = 190; //down (= 270°)  
     }
     else
       SEGENV.aux0 -= increment;
@@ -8874,11 +8874,11 @@ uint16_t mode_particleattractor(void)
   if (SEGMENT.call % 5 == 0)  
      PartSys->sources[0].source.hue++;
   
-  SEGENV.aux0 += 256; // emitting angle, one full turn in 255 frames (0xFFFF is 360�)
+  SEGENV.aux0 += 256; // emitting angle, one full turn in 255 frames (0xFFFF is 360°)
   if (SEGMENT.call % 2 == 0) // alternate direction of emit
     PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0, 12);
   else
-    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, 12); // emit at 180� as well
+    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, 12); // emit at 180° as well
   // apply force
   #ifdef USERMOD_AUDIOREACTIVE  
   uint32_t strength = SEGMENT.speed;      
@@ -9002,11 +9002,11 @@ uint16_t mode_particleattractor(void)
     PartSys->sources[0].source.ttl = 100; // spray never dies
   }
 
-  SEGENV.aux0 += 256;       // emitting angle, one full turn in 255 frames (0xFFFF is 360�)
+  SEGENV.aux0 += 256;       // emitting angle, one full turn in 255 frames (0xFFFF is 360°)
   if (SEGMENT.call % 2 == 0) // alternate direction of emit
     PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0, SEGMENT.custom1 >> 4);
   else
-    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, SEGMENT.custom1 >> 4); // emit at 180� as well
+    PartSys->angleEmit(PartSys->sources[0], SEGENV.aux0 + 0x7FFF, SEGMENT.custom1 >> 4); // emit at 180° as well
 
   SEGENV.aux1 = 0;//++; //line attractor angle
   // apply force
@@ -9313,7 +9313,7 @@ static const char _data_FX_MODE_PARTICLECIRCULARGEQ[] PROGMEM = "PS Center GEQ@S
 /*
 Particle replacement of Ghost Rider by DedeHai (Damian Schneider), original by stepko adapted by Blaz Kristan (AKA blazoncek)
 */
-#define MAXANGLESTEP 2200 //32767 means 180�
+#define MAXANGLESTEP 2200 //32767 means 180°
 uint16_t mode_particleghostrider(void)
 {
   if (SEGLEN == 1)
@@ -9374,7 +9374,7 @@ uint16_t mode_particleghostrider(void)
   ghostsettings.bounceY = SEGMENT.check2;
 
   SEGENV.aux0 += (int32_t)SEGENV.step; // step is angle increment
-  uint16_t emitangle = SEGENV.aux0 + 32767; // +180�
+  uint16_t emitangle = SEGENV.aux0 + 32767; // +180°
   int32_t speed = map(SEGMENT.speed, 0, 255, 12, 64);
   PartSys->sources[0].source.vx = ((int32_t)cos16(SEGENV.aux0) * speed) / (int32_t)32767; 
   PartSys->sources[0].source.vy = ((int32_t)sin16(SEGENV.aux0) * speed) / (int32_t)32767;
@@ -9593,7 +9593,7 @@ if (SEGLEN == 1)
     PartSys->sources[0].source.hue = 0; // todo: make color schemes
     PartSys->sources[0].maxLife = 275;
     PartSys->sources[0].minLife = 270;
-    uint32_t angle = ((uint32_t)SEGMENT.custom1) << 7; //16 bit angle, 0° to 180°
+    uint32_t angle = ((uint32_t)SEGMENT.custom1) << 7; //16 bit angle, 0Â° to 180Â°
     int32_t index = PartSys->angleEmit(PartSys->sources[0], angle, emitspeed);     //upward TODO: make angle adjustable
     Serial.print("base emit at idx = ");
     Serial.println(index);
