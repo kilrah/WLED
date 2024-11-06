@@ -247,6 +247,10 @@
   #include "../usermods/deep_sleep/usermod_deep_sleep.h"
 #endif
 
+#ifdef USERMOD_RF433
+  #include "../usermods/usermod_v2_RF433/usermod_v2_RF433.h"
+#endif
+
 void registerUsermods()
 {
 /*
@@ -478,5 +482,9 @@ void registerUsermods()
 
   #ifdef USERMOD_DEEP_SLEEP
    usermods.add(new DeepSleepUsermod());
+  #endif
+
+  #ifdef USERMOD_RF433
+  UsermodManager::add(new RF433Usermod());
   #endif
 }
